@@ -8,16 +8,14 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Platform,
 } from "react-native";
-import Mapbox from "@rnmapbox/maps";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { LocationObjectCoords } from "expo-location";
 import Constants from "expo-constants";
-
-// Initialize Mapbox with access token from environment variables
-Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || "");
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
 
 // Define types for points of interest
 interface PointOfInterest {
@@ -68,11 +66,11 @@ const pointsOfInterest: PointOfInterest[] = [
   },
 ];
 
-// Route coordinates for a sample route
+// Convert route coordinates to react-native-maps format
 const routeCoordinates = [
-  [5.4697, 51.4416], // Eindhoven
-  [5.5106, 51.4572], // Midpoint
-  [5.5514, 51.4728], // Nuenen
+  { latitude: 51.4416, longitude: 5.4697 }, // Eindhoven
+  { latitude: 51.4572, longitude: 5.5106 }, // Midpoint
+  { latitude: 51.4728, longitude: 5.5514 }, // Nuenen
 ];
 
 export default function MapScreen() {
@@ -81,8 +79,7 @@ export default function MapScreen() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPOI, setSelectedPOI] = useState<PointOfInterest | null>(null);
-  const mapRef = useRef<Mapbox.MapView>(null);
-  const cameraRef = useRef<Mapbox.Camera>(null);
+  const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
     (async () => {
@@ -106,23 +103,31 @@ export default function MapScreen() {
   }, []);
 
   const goToUserLocation = () => {
-    if (location && cameraRef.current) {
-      cameraRef.current.setCamera({
-        centerCoordinate: [location.longitude, location.latitude],
-        zoomLevel: 14,
-        animationDuration: 1000,
-      });
+    if (location && mapRef.current) {
+      mapRef.current.animateToRegion(
+        {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        },
+        1000
+      );
     }
   };
 
   const handleMarkerPress = (poi: PointOfInterest) => {
     setSelectedPOI(poi);
-    if (cameraRef.current) {
-      cameraRef.current.setCamera({
-        centerCoordinate: [poi.coordinate.longitude, poi.coordinate.latitude],
-        zoomLevel: 14,
-        animationDuration: 500,
-      });
+    if (mapRef.current) {
+      mapRef.current.animateToRegion(
+        {
+          latitude: poi.coordinate.latitude,
+          longitude: poi.coordinate.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        },
+        500
+      );
     }
   };
 
@@ -153,74 +158,43 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      <Mapbox.MapView
+      <MapView
         ref={mapRef}
         style={styles.map}
-        styleURL={Mapbox.StyleURL.Street}
-        logoEnabled={false}
-        attributionEnabled={true}
-        compassEnabled={true}
+        provider={PROVIDER_DEFAULT}
+        initialRegion={{
+          latitude: location?.latitude || 51.4416,
+          longitude: location?.longitude || 5.4697,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        }}
+        showsUserLocation
+        showsMyLocationButton
       >
-        <Mapbox.Camera
-          ref={cameraRef}
-          zoomLevel={12}
-          centerCoordinate={
-            location
-              ? [location.longitude, location.latitude]
-              : [5.4697, 51.4416]
-          }
-          animationMode="flyTo"
-          animationDuration={2000}
-        />
-
-        {location && (
-          <Mapbox.PointAnnotation
-            id="userLocation"
-            coordinate={[location.longitude, location.latitude]}
-          >
-            <View style={styles.userMarker}>
-              <View style={styles.userMarkerInner} />
-            </View>
-          </Mapbox.PointAnnotation>
-        )}
-
+        {/* Points of Interest */}
         {pointsOfInterest.map((poi) => (
-          <Mapbox.PointAnnotation
+          <Marker
             key={poi.id}
-            id={poi.id}
-            coordinate={[poi.coordinate.longitude, poi.coordinate.latitude]}
-            onSelected={() => handleMarkerPress(poi)}
+            coordinate={poi.coordinate}
+            title={poi.title}
+            description={poi.description}
+            onPress={() => handleMarkerPress(poi)}
           >
             <View style={styles.markerContainer}>
               <View style={styles.marker}>
                 <Text style={styles.markerText}>{poi.title[0]}</Text>
               </View>
             </View>
-          </Mapbox.PointAnnotation>
+          </Marker>
         ))}
 
-        <Mapbox.ShapeSource
-          id="routeSource"
-          shape={{
-            type: "Feature",
-            properties: {},
-            geometry: {
-              type: "LineString",
-              coordinates: routeCoordinates,
-            },
-          }}
-        >
-          <Mapbox.LineLayer
-            id="routeLine"
-            style={{
-              lineColor: "#3887be",
-              lineWidth: 3,
-              lineCap: "round",
-              lineJoin: "round",
-            }}
-          />
-        </Mapbox.ShapeSource>
-      </Mapbox.MapView>
+        {/* Route Line */}
+        <Polyline
+          coordinates={routeCoordinates}
+          strokeWidth={4}
+          strokeColor="#3887be"
+        />
+      </MapView>
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity style={styles.button} onPress={goToUserLocation}>
@@ -231,6 +205,7 @@ export default function MapScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Selected POI Card */}
       {selectedPOI && (
         <View style={styles.cardContainer}>
           <TouchableOpacity

@@ -36,6 +36,9 @@ export default function PlacesScreen() {
     longitude: number;
   } | null>(null);
   const [placeImages, setPlaceImages] = useState<Record<string, string>>({});
+  const [placeInfoMap, setPlaceInfoMap] = useState<
+    Record<string, PlaceInfo | null>
+  >({});
 
   useEffect(() => {
     const initLocation = async () => {
@@ -104,6 +107,26 @@ export default function PlacesScreen() {
       });
 
       setPlaceImages(imagesMap);
+
+      // Fetch place info for all places
+      const infoPromises = allPlaces.map(async (place) => {
+        try {
+          const info = await AIService.getPlaceInfo(place.name);
+          return { name: place.name, info };
+        } catch (error) {
+          console.error(`Error fetching info for ${place.name}:`, error);
+          return { name: place.name, info: null };
+        }
+      });
+
+      const infoResults = await Promise.all(infoPromises);
+      const infoMap: Record<string, PlaceInfo | null> = {};
+
+      infoResults.forEach((result) => {
+        infoMap[result.name] = result.info;
+      });
+
+      setPlaceInfoMap(infoMap);
     };
 
     initLocation();
@@ -166,21 +189,8 @@ export default function PlacesScreen() {
 
   // Render each place card
   const renderPlaceItem = ({ item }: { item: PlaceLocation }) => {
-    // Using useState and useEffect to handle the async nature of getPlaceInfo
-    const [placeInfo, setPlaceInfo] = useState<PlaceInfo | null>(null);
-
-    useEffect(() => {
-      const fetchPlaceInfo = async () => {
-        try {
-          const info = await AIService.getPlaceInfo(item.name);
-          setPlaceInfo(info);
-        } catch (error) {
-          console.error(`Error fetching info for ${item.name}:`, error);
-        }
-      };
-
-      fetchPlaceInfo();
-    }, [item.name]);
+    // Get place info from our map instead of using hooks
+    const placeInfo = placeInfoMap[item.name];
 
     return (
       <TouchableOpacity
