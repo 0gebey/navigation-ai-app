@@ -1,228 +1,265 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   View,
   Text,
   TouchableOpacity,
   Dimensions,
+  Image,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
+import Mapbox from "@rnmapbox/maps";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { LocationObjectCoords } from "expo-location";
+import Constants from "expo-constants";
 
-// Define POI type
+// Initialize Mapbox with access token from environment variables
+Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || "");
+
+// Define types for points of interest
 interface PointOfInterest {
-  id: number;
-  name: string;
-  coordinates: {
+  id: string;
+  title: string;
+  description: string;
+  coordinate: {
     latitude: number;
     longitude: number;
   };
-  description: string;
-  images: string[];
+  image: string;
 }
 
-// Mock data for route
-const mockRoute = [
-  { latitude: 51.4416, longitude: 5.4697 }, // Eindhoven
-  { latitude: 51.4431, longitude: 5.4728 }, // Point 1
-  { latitude: 51.4472, longitude: 5.4811 }, // Point 2
-  { latitude: 51.4505, longitude: 5.49 }, // Point 3
-  { latitude: 51.4583, longitude: 5.5583 }, // Nuenen (point of interest)
-  { latitude: 51.4733, longitude: 5.6178 }, // Helmond
-];
-
-// Mock point of interest data
+// Sample point of interest data
 const pointsOfInterest: PointOfInterest[] = [
   {
-    id: 1,
-    name: "Nuenen",
-    coordinates: { latitude: 51.4583, longitude: 5.5583 },
-    description:
-      "Village where Vincent van Gogh lived and worked from 1883 to 1885.",
-    images: ["nuenen1.jpg", "nuenen2.jpg"],
+    id: "1",
+    title: "Nuenen",
+    description: "The village where Vincent van Gogh lived and worked",
+    coordinate: {
+      latitude: 51.4728,
+      longitude: 5.5514,
+    },
+    image:
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d9/Vincentre_Nuenen.jpg/1024px-Vincentre_Nuenen.jpg",
   },
+  {
+    id: "2",
+    title: "Eindhoven",
+    description: "A city known for design and technology innovation",
+    coordinate: {
+      latitude: 51.4416,
+      longitude: 5.4697,
+    },
+    image:
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Eindhoven_-_Stadhuisplein_-_City_Hall_Square_-_Stadhuis.jpg/1024px-Eindhoven_-_Stadhuisplein_-_City_Hall_Square_-_Stadhuis.jpg",
+  },
+  {
+    id: "3",
+    title: "Helmond",
+    description: "Historic city with a beautiful castle",
+    coordinate: {
+      latitude: 51.4825,
+      longitude: 5.6618,
+    },
+    image:
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/P1000978kopie.jpg/1024px-P1000978kopie.jpg",
+  },
+];
+
+// Route coordinates for a sample route
+const routeCoordinates = [
+  [5.4697, 51.4416], // Eindhoven
+  [5.5106, 51.4572], // Midpoint
+  [5.5514, 51.4728], // Nuenen
 ];
 
 export default function MapScreen() {
   const router = useRouter();
-  const [location, setLocation] = useState<Location.LocationObject | null>(
-    null
-  );
+  const [location, setLocation] = useState<LocationObjectCoords | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [region, setRegion] = useState({
-    latitude: 51.4416,
-    longitude: 5.4697,
-    latitudeDelta: 0.0922,
-    longitudeDelta: 0.0421,
-  });
-  const [showAlert, setShowAlert] = useState(false);
-  const [currentPOI, setCurrentPOI] = useState<PointOfInterest | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedPOI, setSelectedPOI] = useState<PointOfInterest | null>(null);
+  const mapRef = useRef<Mapbox.MapView>(null);
+  const cameraRef = useRef<Mapbox.Camera>(null);
 
   useEffect(() => {
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        setErrorMsg("Permission to access location was denied");
-        return;
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          setErrorMsg("Permission to access location was denied");
+          setLoading(false);
+          return;
+        }
+
+        let location = await Location.getCurrentPositionAsync({});
+        setLocation(location.coords);
+      } catch (error) {
+        setErrorMsg("Could not get location");
+        console.error(error);
+      } finally {
+        setLoading(false);
       }
-
-      let location = await Location.getCurrentPositionAsync({});
-      setLocation(location);
-      setRegion({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
-      });
-
-      // Mock user approaching Nuenen after 5 seconds
-      setTimeout(() => {
-        setCurrentPOI(pointsOfInterest[0]);
-        setShowAlert(true);
-      }, 5000);
     })();
   }, []);
 
-  const handleLearnMore = (placeName: string) => {
-    router.push(`/place/${placeName}`);
+  const goToUserLocation = () => {
+    if (location && cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: [location.longitude, location.latitude],
+        zoomLevel: 14,
+        animationDuration: 1000,
+      });
+    }
   };
+
+  const handleMarkerPress = (poi: PointOfInterest) => {
+    setSelectedPOI(poi);
+    if (cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: [poi.coordinate.longitude, poi.coordinate.latitude],
+        zoomLevel: 14,
+        animationDuration: 500,
+      });
+    }
+  };
+
+  const handleCloseCard = () => {
+    setSelectedPOI(null);
+  };
+
+  const navigateToPlacesTab = () => {
+    router.push("/(tabs)/places");
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#0000ff" />
+        <Text style={styles.paragraph}>Loading map...</Text>
+      </View>
+    );
+  }
+
+  if (errorMsg) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.paragraph}>{errorMsg}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <MapView
+      <Mapbox.MapView
+        ref={mapRef}
         style={styles.map}
-        region={region}
-        showsUserLocation
-        showsMyLocationButton
+        styleURL={Mapbox.StyleURL.Street}
+        logoEnabled={false}
+        attributionEnabled={true}
+        compassEnabled={true}
       >
-        {/* Display user location marker if available */}
+        <Mapbox.Camera
+          ref={cameraRef}
+          zoomLevel={12}
+          centerCoordinate={
+            location
+              ? [location.longitude, location.latitude]
+              : [5.4697, 51.4416]
+          }
+          animationMode="flyTo"
+          animationDuration={2000}
+        />
+
         {location && (
-          <Marker
-            coordinate={{
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-            }}
-            title="You are here"
-            pinColor="#3F51B5"
-          />
+          <Mapbox.PointAnnotation
+            id="userLocation"
+            coordinate={[location.longitude, location.latitude]}
+          >
+            <View style={styles.userMarker}>
+              <View style={styles.userMarkerInner} />
+            </View>
+          </Mapbox.PointAnnotation>
         )}
 
-        {/* Display route as individual markers instead of Polyline */}
-        {mockRoute.map((point, index) => (
-          <Marker
-            key={`route-${index}`}
-            coordinate={point}
-            pinColor={
-              index === 0 || index === mockRoute.length - 1
-                ? "#FF5722"
-                : "#FFAB91"
-            }
-            opacity={0.7}
-            anchor={{ x: 0.5, y: 0.5 }}
-          />
-        ))}
-
-        {/* Display points of interest */}
         {pointsOfInterest.map((poi) => (
-          <Marker
+          <Mapbox.PointAnnotation
             key={poi.id}
-            coordinate={poi.coordinates}
-            title={poi.name}
-            description={poi.description}
-            pinColor="#4CAF50"
-            onCalloutPress={() => handleLearnMore(poi.name)}
-          />
-        ))}
-      </MapView>
-
-      {/* Navigation Card */}
-      <View style={styles.navCard}>
-        <View style={styles.navHeader}>
-          <View style={styles.navHeaderContent}>
-            <Ionicons name="alert-circle" size={24} color="#FF9800" />
-            <Text style={styles.navDelay}>8 min delay</Text>
-          </View>
-          <TouchableOpacity onPress={() => {}}>
-            <Ionicons name="close" size={24} color="#000" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.navProgress}>
-          <View style={styles.progressBar}>
-            <View style={styles.progressFill}></View>
-            <View style={styles.progressEmpty}></View>
-          </View>
-          <Text style={styles.navInfo}>400 m - Defective vehicle</Text>
-        </View>
-
-        <View style={styles.navDirections}>
-          <View style={styles.navDirectionInfo}>
-            <Ionicons
-              name="arrow-up"
-              size={28}
-              color="#FFF"
-              style={styles.directionIcon}
-            />
-            <View style={styles.navTextContainer}>
-              <Text style={styles.navDistance}>1.9 km</Text>
-              <Text style={styles.navStreet}>Ede-Noord / Renswoude</Text>
+            id={poi.id}
+            coordinate={[poi.coordinate.longitude, poi.coordinate.latitude]}
+            onSelected={() => handleMarkerPress(poi)}
+          >
+            <View style={styles.markerContainer}>
+              <View style={styles.marker}>
+                <Text style={styles.markerText}>{poi.title[0]}</Text>
+              </View>
             </View>
-          </View>
-          <View style={styles.navHighway}>
-            <Text style={styles.highwayText}>A30</Text>
-          </View>
-        </View>
+          </Mapbox.PointAnnotation>
+        ))}
+
+        <Mapbox.ShapeSource
+          id="routeSource"
+          shape={{
+            type: "Feature",
+            properties: {},
+            geometry: {
+              type: "LineString",
+              coordinates: routeCoordinates,
+            },
+          }}
+        >
+          <Mapbox.LineLayer
+            id="routeLine"
+            style={{
+              lineColor: "#3887be",
+              lineWidth: 3,
+              lineCap: "round",
+              lineJoin: "round",
+            }}
+          />
+        </Mapbox.ShapeSource>
+      </Mapbox.MapView>
+
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity style={styles.button} onPress={goToUserLocation}>
+          <Text style={styles.buttonText}>My Location</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={navigateToPlacesTab}>
+          <Text style={styles.buttonText}>View Places</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* POI Alert */}
-      {showAlert && currentPOI && (
-        <View style={styles.poiAlert}>
-          <View style={styles.poiHeader}>
-            <Text style={styles.poiTitle}>{currentPOI.name}</Text>
-            <TouchableOpacity onPress={() => setShowAlert(false)}>
-              <Ionicons name="close-circle" size={24} color="#FFF" />
+      {selectedPOI && (
+        <View style={styles.cardContainer}>
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={handleCloseCard}
+          >
+            <Text style={styles.closeButtonText}>✕</Text>
+          </TouchableOpacity>
+          <Image source={{ uri: selectedPOI.image }} style={styles.cardImage} />
+          <View style={styles.cardContent}>
+            <Text style={styles.cardTitle}>{selectedPOI.title}</Text>
+            <Text style={styles.cardDescription}>
+              {selectedPOI.description}
+            </Text>
+            <TouchableOpacity
+              style={styles.detailsButton}
+              onPress={() => {
+                Alert.alert(
+                  `About ${selectedPOI.title}`,
+                  "This feature will allow you to see detailed information about this location.",
+                  [{ text: "OK" }]
+                );
+              }}
+            >
+              <Text style={styles.detailsButtonText}>Learn More</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.poiDescription}>{currentPOI.description}</Text>
-          <TouchableOpacity
-            style={styles.poiButton}
-            onPress={() => handleLearnMore(currentPOI.name)}
-          >
-            <Text style={styles.poiButtonText}>Learn More</Text>
-          </TouchableOpacity>
         </View>
       )}
-
-      {/* Speed Limit */}
-      <View style={styles.speedContainer}>
-        <View style={styles.speedLimit}>
-          <Text style={styles.speedText}>100</Text>
-        </View>
-        <View style={styles.currentSpeed}>
-          <Text style={styles.currentSpeedText}>98</Text>
-        </View>
-      </View>
-
-      {/* Navigation Toolbar */}
-      <View style={styles.toolbar}>
-        <TouchableOpacity style={styles.toolbarButton}>
-          <Ionicons name="menu" size={24} color="#FFF" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.toolbarButton}>
-          <Ionicons name="search" size={24} color="#FFF" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.toolbarButton}
-          onPress={() => router.push("/places")}
-        >
-          <Ionicons name="list" size={24} color="#FFF" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.toolbarButton}>
-          <Ionicons name="options" size={24} color="#FFF" />
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
@@ -230,190 +267,136 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
   },
   map: {
-    width: Dimensions.get("window").width,
-    height: Dimensions.get("window").height,
+    flex: 1,
   },
-  navCard: {
-    position: "absolute",
-    bottom: 110,
-    left: 10,
-    right: 10,
-    backgroundColor: "#FFFFFF",
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  paragraph: {
+    fontSize: 16,
+    marginTop: 10,
+    textAlign: "center",
+  },
+  markerContainer: {
+    width: 30,
+    height: 30,
+  },
+  marker: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#3887be",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "white",
+  },
+  markerText: {
+    color: "white",
+    fontWeight: "bold",
+  },
+  userMarker: {
+    width: 24,
+    height: 24,
     borderRadius: 12,
-    padding: 15,
-    elevation: 4,
+    backgroundColor: "rgba(0, 122, 255, 0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  userMarkerInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "rgb(0, 122, 255)",
+    borderWidth: 2,
+    borderColor: "white",
+  },
+  buttonContainer: {
+    position: "absolute",
+    top: 16,
+    right: 16,
+    flexDirection: "column",
+    gap: 8,
+  },
+  button: {
+    backgroundColor: "white",
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  buttonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#3887be",
+  },
+  cardContainer: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: "white",
+    borderRadius: 12,
+    overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-  },
-  navHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  navHeaderContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  navDelay: {
-    marginLeft: 5,
-    fontWeight: "bold",
-    color: "#FF9800",
-  },
-  navProgress: {
-    marginBottom: 10,
-  },
-  progressBar: {
-    flexDirection: "row",
-    height: 6,
-    borderRadius: 3,
-    marginBottom: 5,
-  },
-  progressFill: {
-    flex: 0.7,
-    backgroundColor: "#64DD17",
-    borderTopLeftRadius: 3,
-    borderBottomLeftRadius: 3,
-  },
-  progressEmpty: {
-    flex: 0.3,
-    backgroundColor: "#E0E0E0",
-    borderTopRightRadius: 3,
-    borderBottomRightRadius: 3,
-  },
-  navInfo: {
-    fontSize: 12,
-    color: "#757575",
-  },
-  navDirections: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  navDirectionInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  directionIcon: {
-    backgroundColor: "#4CAF50",
-    padding: 8,
-    borderRadius: 20,
-    overflow: "hidden",
-  },
-  navTextContainer: {
-    marginLeft: 10,
-  },
-  navDistance: {
-    fontWeight: "bold",
-    fontSize: 18,
-  },
-  navStreet: {
-    fontSize: 14,
-    color: "#424242",
-  },
-  navHighway: {
-    backgroundColor: "#F44336",
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-    borderRadius: 15,
-  },
-  highwayText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-  },
-  poiAlert: {
-    position: "absolute",
-    top: 20,
-    left: 10,
-    right: 10,
-    backgroundColor: "rgba(33, 150, 243, 0.9)",
-    borderRadius: 10,
-    padding: 15,
     elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
   },
-  poiHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
+  cardImage: {
+    width: "100%",
+    height: 120,
   },
-  poiTitle: {
+  cardContent: {
+    padding: 16,
+  },
+  cardTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#FFFFFF",
+    marginBottom: 8,
   },
-  poiDescription: {
+  cardDescription: {
     fontSize: 14,
-    color: "#E1F5FE",
-    marginBottom: 15,
+    color: "#666",
+    marginBottom: 12,
   },
-  poiButton: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
+  closeButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 1,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  closeButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  detailsButton: {
+    backgroundColor: "#3887be",
     paddingVertical: 8,
-    paddingHorizontal: 15,
+    paddingHorizontal: 16,
+    borderRadius: 20,
     alignSelf: "flex-start",
   },
-  poiButtonText: {
-    color: "#0D47A1",
-    fontWeight: "bold",
-  },
-  speedContainer: {
-    position: "absolute",
-    right: 10,
-    top: 100,
-    alignItems: "center",
-  },
-  speedLimit: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 2,
-    borderColor: "#FF0000",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  speedText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#000000",
-  },
-  currentSpeed: {
-    width: 60,
-    height: 60,
-    backgroundColor: "#212121",
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  currentSpeedText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-  },
-  toolbar: {
-    position: "absolute",
-    bottom: 20,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "space-around",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
-  },
-  toolbarButton: {
-    padding: 10,
+  detailsButtonText: {
+    color: "white",
+    fontWeight: "600",
+    fontSize: 14,
   },
 });

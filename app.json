@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "map-app",
+    "name": "Map App",
     "slug": "map-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,19 +13,61 @@
       "backgroundColor": "#ffffff"
     },
     "scheme": "map-app",
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Map App to use your location to show nearby points of interest."
+        }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsVersion": "11.8.0",
+          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoiMGdlYmV5IiwiYSI6ImNsbHhlNDM0ZzBtMHczbW1xZmV3Nzc2d3AifQ.Bna3K5CQO2Xe07Ew_8X1LA"
+        }
+      ]
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": ["location", "fetch"],
+        "NSLocationWhenInUseUsageDescription": "Map App needs access to your location to show you nearby points of interest and provide navigation.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Map App needs access to your location to show you nearby points of interest and provide navigation."
+      },
+      "bundleIdentifier": "com.mapapp.example"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ],
+      "package": "com.mapapp.example"
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "your-eas-project-id"
+      },
+      "mapboxAccessToken": "pk.eyJ1IjoiMGdlYmV5IiwiYSI6ImNtOWc4eDloMjEzbnUya3Nhc3QweHNsdzgifQ.EgYSNJZX7G-PfdojXV9y_g"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/your-project-id"
     }
   }
 }

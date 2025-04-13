@@ -1,41 +1,67 @@
 import * as Location from "expo-location";
-import { EventEmitter } from "events";
 
-export interface Place {
-  id: string;
-  name: string;
-  coordinates: {
-    latitude: number;
-    longitude: number;
-  };
-  radius?: number; // Detection radius in meters
+// Simple EventEmitter implementation for React Native
+class EventEmitter {
+  private events: { [key: string]: Function[] } = {};
+
+  on(event: string, listener: Function): void {
+    if (!this.events[event]) {
+      this.events[event] = [];
+    }
+    this.events[event].push(listener);
+  }
+
+  emit(event: string, ...args: any[]): void {
+    const listeners = this.events[event];
+    if (listeners) {
+      listeners.forEach((listener) => listener(...args));
+    }
+  }
+
+  removeListener(event: string, listener: Function): void {
+    const listeners = this.events[event];
+    if (listeners) {
+      this.events[event] = listeners.filter((l) => l !== listener);
+    }
+  }
+
+  removeAllListeners(event?: string): void {
+    if (event) {
+      delete this.events[event];
+    } else {
+      this.events = {};
+    }
+  }
 }
 
-export interface Route {
+interface Coordinates {
+  latitude: number;
+  longitude: number;
+}
+
+export interface PlaceLocation {
   id: string;
   name: string;
-  start: {
-    name: string;
-    coordinates: {
-      latitude: number;
-      longitude: number;
-    };
-  };
-  end: {
-    name: string;
-    coordinates: {
-      latitude: number;
-      longitude: number;
-    };
-  };
-  waypoints: Array<{
-    latitude: number;
-    longitude: number;
-  }>;
+  coordinates: Coordinates;
+  address?: string;
+  category?: string;
+  distance?: number; // Distance from user in meters
+  photoReference?: string; // Add photoReference property
+  radius?: number; // Radius in meters for proximity detection
+}
+
+export interface RouteInfo {
+  id?: string;
+  name?: string;
+  distance: number; // in meters
+  duration: number; // in seconds
+  startLocation: Coordinates;
+  endLocation: Coordinates;
+  coordinates: Coordinates[]; // Route coordinates for drawing
 }
 
 // Sample POI data - would come from a database in a real app
-const placesOfInterest: Place[] = [
+const placesOfInterest: PlaceLocation[] = [
   {
     id: "1",
     name: "Nuenen",
@@ -65,7 +91,7 @@ const placesOfInterest: Place[] = [
   },
 ];
 
-class LocationService extends EventEmitter {
+export class LocationService extends EventEmitter {
   private watchId: Location.LocationSubscription | null = null;
   private lastLocation: Location.LocationObject | null = null;
   private isTracking: boolean = false;
@@ -168,27 +194,6 @@ class LocationService extends EventEmitter {
     }
   }
 
-  // Calculate distance between two coordinates in kilometers
-  calculateDistance(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number
-  ): number {
-    const R = 6371; // Radius of the earth in km
-    const dLat = this.deg2rad(lat2 - lat1);
-    const dLon = this.deg2rad(lon2 - lon1);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(this.deg2rad(lat1)) *
-        Math.cos(this.deg2rad(lat2)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const distance = R * c; // Distance in km
-    return distance;
-  }
-
   // Convert degrees to radians
   private deg2rad(deg: number): number {
     return deg * (Math.PI / 180);
@@ -198,14 +203,15 @@ class LocationService extends EventEmitter {
   private checkProximityToPlaces(location: Location.LocationObject): void {
     placesOfInterest.forEach((place) => {
       const distance = this.calculateDistance(
-        location.coords.latitude,
-        location.coords.longitude,
-        place.coordinates.latitude,
-        place.coordinates.longitude
+        {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        },
+        place.coordinates
       );
 
       // Convert distance to meters for comparison with radius
-      const distanceInMeters = distance * 1000;
+      const distanceInMeters = distance; // Already in meters from calculateDistance
       const radius = place.radius || 1000; // Default 1km if not specified
 
       if (distanceInMeters <= radius) {
@@ -233,12 +239,12 @@ class LocationService extends EventEmitter {
   }
 
   // Get all places of interest
-  getPlacesOfInterest(): Place[] {
+  getPlacesOfInterest(): PlaceLocation[] {
     return placesOfInterest;
   }
 
   // Get a specific place by ID
-  getPlaceById(id: string): Place | undefined {
+  getPlaceById(id: string): PlaceLocation | undefined {
     return placesOfInterest.find((place) => place.id === id);
   }
 
@@ -248,7 +254,7 @@ class LocationService extends EventEmitter {
     startLng: number,
     endLat: number,
     endLng: number
-  ): Promise<Route> {
+  ): Promise<RouteInfo> {
     return new Promise((resolve) => {
       // Simulate API delay
       setTimeout(() => {
@@ -267,29 +273,167 @@ class LocationService extends EventEmitter {
           });
         }
 
-        const route: Route = {
+        const route: RouteInfo = {
           id: `route-${Date.now()}`,
           name: "Custom Route",
-          start: {
-            name: "Starting Point",
-            coordinates: {
-              latitude: startLat,
-              longitude: startLng,
-            },
+          distance: 0, // Add a default value
+          duration: 0, // Add a default value
+          startLocation: {
+            latitude: startLat,
+            longitude: startLng,
           },
-          end: {
-            name: "Destination",
-            coordinates: {
-              latitude: endLat,
-              longitude: endLng,
-            },
+          endLocation: {
+            latitude: endLat,
+            longitude: endLng,
           },
-          waypoints,
+          coordinates: waypoints,
         };
 
         resolve(route);
       }, 500);
     });
+  }
+
+  /**
+   * Calculate the distance between two coordinates in meters
+   */
+  calculateDistance(point1: Coordinates, point2: Coordinates): number {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = (point1.latitude * Math.PI) / 180;
+    const φ2 = (point2.latitude * Math.PI) / 180;
+    const Δφ = ((point2.latitude - point1.latitude) * Math.PI) / 180;
+    const Δλ = ((point2.longitude - point1.longitude) * Math.PI) / 180;
+
+    const a =
+      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c;
+
+    return distance; // in meters
+  }
+
+  /**
+   * Find nearby places based on user location and radius
+   */
+  findNearbyPlaces(
+    userLocation: Coordinates,
+    places: PlaceLocation[],
+    radius: number = 5000
+  ): PlaceLocation[] {
+    return places
+      .map((place) => {
+        const distance = this.calculateDistance(
+          userLocation,
+          place.coordinates
+        );
+        return {
+          ...place,
+          distance,
+        };
+      })
+      .filter((place) => place.distance <= radius)
+      .sort((a, b) => (a.distance || 0) - (b.distance || 0));
+  }
+
+  /**
+   * Get nearby place by category
+   */
+  findPlacesByCategory(
+    userLocation: Coordinates,
+    places: PlaceLocation[],
+    category: string,
+    radius: number = 10000
+  ): PlaceLocation[] {
+    const nearbyPlaces = this.findNearbyPlaces(userLocation, places, radius);
+    return nearbyPlaces.filter((place) => place.category === category);
+  }
+
+  /**
+   * Mock route planning between two points
+   * In a real implementation, this would call a routing API like Google Directions, Mapbox, etc.
+   */
+  async planRoute(
+    start: Coordinates,
+    end: Coordinates
+  ): Promise<RouteInfo | null> {
+    try {
+      // Calculate direct distance
+      const directDistance = this.calculateDistance(start, end);
+
+      // Simulate route calculation delay
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Generate some intermediate points to simulate a route
+      const numPoints = Math.max(2, Math.floor(directDistance / 500)); // One point every 500m
+      const coordinates: Coordinates[] = [start];
+
+      for (let i = 1; i < numPoints - 1; i++) {
+        const fraction = i / (numPoints - 1);
+
+        // Add some randomness to make it look like a realistic route
+        const jitterLat = (Math.random() - 0.5) * 0.001;
+        const jitterLng = (Math.random() - 0.5) * 0.001;
+
+        coordinates.push({
+          latitude:
+            start.latitude +
+            (end.latitude - start.latitude) * fraction +
+            jitterLat,
+          longitude:
+            start.longitude +
+            (end.longitude - start.longitude) * fraction +
+            jitterLng,
+        });
+      }
+
+      coordinates.push(end);
+
+      // Simulate that the route is typically longer than direct distance
+      const routeFactor = 1.2 + Math.random() * 0.3; // Between 1.2x and 1.5x the direct distance
+      const routeDistance = directDistance * routeFactor;
+
+      // Estimate duration based on average speed of 40 km/h
+      const speedInMetersPerSecond = (40 * 1000) / 3600;
+      const duration = routeDistance / speedInMetersPerSecond;
+
+      return {
+        distance: routeDistance,
+        duration: duration,
+        startLocation: start,
+        endLocation: end,
+        coordinates: coordinates,
+      };
+    } catch (error) {
+      console.error("Error planning route:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Format distance for display
+   */
+  formatDistance(meters: number): string {
+    if (meters < 1000) {
+      return `${Math.round(meters)}m`;
+    } else {
+      return `${(meters / 1000).toFixed(1)}km`;
+    }
+  }
+
+  /**
+   * Format duration for display
+   */
+  formatDuration(seconds: number): string {
+    const minutes = Math.floor(seconds / 60);
+
+    if (minutes < 60) {
+      return `${minutes} min`;
+    } else {
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+      return `${hours}h ${remainingMinutes}min`;
+    }
   }
 }
 

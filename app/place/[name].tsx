@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
   View,
@@ -7,100 +7,68 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Dimensions,
-  SafeAreaView,
-  StatusBar,
-  Linking,
 } from "react-native";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import AIService from "../../services/AIService";
-import type { PlaceInfo } from "../../services/AIService";
+import AIService, { PlaceInfo } from "../../services/AIService";
 
-// Mock image data - in a real app, these would come from an API or assets
-const placeImages: Record<string, string[]> = {
-  Nuenen: [
-    "https://images.unsplash.com/photo-1614094082869-cd4e4b2905c7?q=80&w=2787&auto=format&fit=crop",
-    "https://images.unsplash.com/photo-1503560683205-acf61ac68a3b?q=80&w=2787&auto=format&fit=crop",
-    "https://images.unsplash.com/photo-1610558528098-ed78dc36f8dc?q=80&w=2787&auto=format&fit=crop",
-  ],
-  Eindhoven: [
-    "https://images.unsplash.com/photo-1558000143-a78f8299c40b?q=80&w=2787&auto=format&fit=crop",
-    "https://images.unsplash.com/photo-1544985361-b420d7a77043?q=80&w=2787&auto=format&fit=crop",
-    "https://images.unsplash.com/photo-1605796348891-2d75d68e8cb9?q=80&w=2787&auto=format&fit=crop",
-  ],
-  Helmond: [
-    "https://images.unsplash.com/photo-1569949609438-f8f0c6a4479a?q=80&w=2815&auto=format&fit=crop",
-    "https://images.unsplash.com/photo-1518639192441-8fce0a366e2e?q=80&w=2787&auto=format&fit=crop",
-    "https://images.unsplash.com/photo-1528041119984-da3a9f8a04d4?q=80&w=2787&auto=format&fit=crop",
-  ],
-};
-
-export default function PlaceDetailScreen() {
-  const { name } = useLocalSearchParams<{ name: string }>();
+export default function PlaceScreen() {
+  const { name } = useLocalSearchParams();
   const router = useRouter();
-  const placeName = name || "Nuenen"; // Default to Nuenen if no name provided
-
   const [placeInfo, setPlaceInfo] = useState<PlaceInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState("about");
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState("about");
 
-  // Fetch place information when the screen loads
   useEffect(() => {
     const fetchPlaceInfo = async () => {
+      setLoading(true);
       try {
-        const info = await AIService.getPlaceInfo(placeName);
+        // Get place info from AIService
+        const info = await AIService.getPlaceInfo(name as string);
         setPlaceInfo(info);
-        setLoading(false);
       } catch (error) {
         console.error("Error fetching place info:", error);
+      } finally {
         setLoading(false);
       }
     };
 
     fetchPlaceInfo();
-  }, [placeName]);
+  }, [name]);
 
-  // Handle navigation back
-  const handleBack = () => {
-    router.back();
-  };
+  // Web images for demonstration purposes
+  const getPlaceImages = (placeName: string) => {
+    const imageMap: Record<string, string[]> = {
+      Nuenen: [
+        "https://images.unsplash.com/photo-1550686041-366ad85a1355?q=80&w=600&auto=format",
+        "https://images.unsplash.com/photo-1550686041-a5c70e3a133b?q=80&w=600&auto=format",
+      ],
+      Eindhoven: [
+        "https://images.unsplash.com/photo-1564565562150-46c2e7938b3d?q=80&w=600&auto=format",
+        "https://images.unsplash.com/photo-1550686041-366ad85a1355?q=80&w=600&auto=format",
+      ],
+      Helmond: [
+        "https://images.unsplash.com/photo-1533154683836-84ea7a0bc310?q=80&w=600&auto=format",
+        "https://images.unsplash.com/photo-1550686041-366ad85a1355?q=80&w=600&auto=format",
+      ],
+    };
 
-  // Handle image carousel navigation
-  const handleNextImage = () => {
-    const images = placeImages[placeName] || [];
-    setCurrentImageIndex((currentImageIndex + 1) % images.length);
-  };
-
-  const handlePrevImage = () => {
-    const images = placeImages[placeName] || [];
-    setCurrentImageIndex(
-      (currentImageIndex - 1 + images.length) % images.length
+    return (
+      imageMap[placeName as string] || [
+        "https://images.unsplash.com/photo-1518945756765-f8641d60aa75?q=80&w=600&auto=format",
+        "https://images.unsplash.com/photo-1518945756765-f8641d60aa75?q=80&w=600&auto=format",
+      ]
     );
   };
 
-  // Open maps app with directions to the place
-  const handleGetDirections = () => {
-    // In a real app, we would use the actual coordinates
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-      placeName
-    )}`;
-    Linking.openURL(url);
-  };
-
-  // Play audio narration
-  const handlePlayAudio = () => {
-    // In a real app, this would trigger text-to-speech or play a pre-recorded audio
-    alert("Audio narration would play here");
-  };
+  const placeImages = getPlaceImages(name as string);
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF5722" />
+        <ActivityIndicator size="large" color="#4CAF50" />
         <Text style={styles.loadingText}>
-          Loading information about {placeName}...
+          Loading information about {name}...
         </Text>
       </View>
     );
@@ -109,426 +77,348 @@ export default function PlaceDetailScreen() {
   if (!placeInfo) {
     return (
       <View style={styles.errorContainer}>
-        <Ionicons name="alert-circle-outline" size={64} color="#F44336" />
+        <Ionicons name="alert-circle" size={48} color="#F44336" />
         <Text style={styles.errorText}>
-          Could not load information for {placeName}
+          Sorry, we couldn't find information about {name}.
         </Text>
-        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  const images = placeImages[placeName] || [];
-
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
-
-      {/* Header with image carousel */}
-      <View style={styles.imageContainer}>
-        {images.length > 0 ? (
-          <>
-            <Image
-              source={{ uri: images[currentImageIndex] }}
-              style={styles.image}
-              resizeMode="cover"
-            />
-
-            {/* Image navigation buttons */}
-            {images.length > 1 && (
-              <>
-                <TouchableOpacity
-                  style={[styles.imageNavButton, styles.imageNavLeft]}
-                  onPress={handlePrevImage}
-                >
-                  <Ionicons name="chevron-back" size={24} color="#FFF" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.imageNavButton, styles.imageNavRight]}
-                  onPress={handleNextImage}
-                >
-                  <Ionicons name="chevron-forward" size={24} color="#FFF" />
-                </TouchableOpacity>
-
-                {/* Image counter */}
-                <View style={styles.imageCounter}>
-                  <Text style={styles.imageCounterText}>
-                    {currentImageIndex + 1}/{images.length}
-                  </Text>
-                </View>
-              </>
-            )}
-          </>
-        ) : (
-          <View style={styles.noImageContainer}>
-            <Ionicons name="image-outline" size={64} color="#BDBDBD" />
-            <Text style={styles.noImageText}>No images available</Text>
+    <>
+      <Stack.Screen
+        options={{
+          title: placeInfo.name,
+          headerBackTitle: "Map",
+        }}
+      />
+      <ScrollView style={styles.container}>
+        <View style={styles.heroContainer}>
+          <Image
+            source={{ uri: placeImages[0] }}
+            style={styles.heroImage}
+            resizeMode="cover"
+          />
+          <View style={styles.heroOverlay}>
+            <Text style={styles.heroTitle}>{placeInfo.name}</Text>
           </View>
-        )}
-
-        {/* Back button */}
-        <TouchableOpacity style={styles.backButtonTop} onPress={handleBack}>
-          <Ionicons name="arrow-back" size={24} color="#FFF" />
-        </TouchableOpacity>
-
-        {/* Title overlay */}
-        <View style={styles.titleOverlay}>
-          <Text style={styles.title}>{placeInfo.name}</Text>
         </View>
-      </View>
 
-      {/* Action buttons */}
-      <View style={styles.actionButtonsContainer}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={handleGetDirections}
-        >
-          <Ionicons name="navigate" size={24} color="#FF5722" />
-          <Text style={styles.actionButtonText}>Directions</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionButton} onPress={handlePlayAudio}>
-          <Ionicons name="volume-high" size={24} color="#FF5722" />
-          <Text style={styles.actionButtonText}>Listen</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionButton} onPress={() => {}}>
-          <Ionicons name="bookmark-outline" size={24} color="#FF5722" />
-          <Text style={styles.actionButtonText}>Save</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionButton} onPress={() => {}}>
-          <Ionicons name="share-social-outline" size={24} color="#FF5722" />
-          <Text style={styles.actionButtonText}>Share</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Content tabs */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeSection === "about" && styles.activeTab]}
-          onPress={() => setActiveSection("about")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeSection === "about" && styles.activeTabText,
-            ]}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "about" && styles.activeTab]}
+            onPress={() => setActiveTab("about")}
           >
-            About
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeSection === "history" && styles.activeTab]}
-          onPress={() => setActiveSection("history")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeSection === "history" && styles.activeTabText,
-            ]}
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "about" && styles.activeTabText,
+              ]}
+            >
+              About
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "history" && styles.activeTab]}
+            onPress={() => setActiveTab("history")}
           >
-            History
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            activeSection === "attractions" && styles.activeTab,
-          ]}
-          onPress={() => setActiveSection("attractions")}
-        >
-          <Text
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "history" && styles.activeTabText,
+              ]}
+            >
+              History
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[
-              styles.tabText,
-              activeSection === "attractions" && styles.activeTabText,
+              styles.tab,
+              activeTab === "attractions" && styles.activeTab,
             ]}
+            onPress={() => setActiveTab("attractions")}
           >
-            Must See
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "attractions" && styles.activeTabText,
+              ]}
+            >
+              Attractions
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity
-          style={[styles.tab, activeSection === "facts" && styles.activeTab]}
-          onPress={() => setActiveSection("facts")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeSection === "facts" && styles.activeTabText,
-            ]}
-          >
-            Fun Facts
-          </Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.contentContainer}>
+          {activeTab === "about" && (
+            <View>
+              <Text style={styles.sectionTitle}>About</Text>
+              <Text style={styles.descriptionText}>
+                {placeInfo.description}
+              </Text>
 
-      {/* Content area */}
-      <ScrollView style={styles.contentContainer}>
-        {activeSection === "about" && (
-          <View style={styles.sectionContainer}>
-            <Text style={styles.description}>{placeInfo.description}</Text>
-          </View>
-        )}
-
-        {activeSection === "history" && (
-          <View style={styles.sectionContainer}>
-            {placeInfo.historicalFacts.map((fact: string, index: number) => (
-              <View key={index} style={styles.factItem}>
-                <View style={styles.factBullet}>
-                  <Text style={styles.factBulletText}>{index + 1}</Text>
+              <Text style={styles.sectionTitle}>Fun Facts</Text>
+              {placeInfo.funFacts.map((fact: string, index: number) => (
+                <View key={index} style={styles.factItem}>
+                  <Ionicons name="star" size={16} color="#FFD700" />
+                  <Text style={styles.factText}>{fact}</Text>
                 </View>
-                <Text style={styles.factText}>{fact}</Text>
-              </View>
-            ))}
-          </View>
-        )}
+              ))}
+            </View>
+          )}
 
-        {activeSection === "attractions" && (
-          <View style={styles.sectionContainer}>
-            {placeInfo.mustSeeAttractions.map(
-              (attraction: string, index: number) => (
-                <View key={index} style={styles.attractionItem}>
-                  <Ionicons name="star" size={20} color="#FFB300" />
-                  <Text style={styles.attractionText}>{attraction}</Text>
+          {activeTab === "history" && (
+            <View>
+              <Text style={styles.sectionTitle}>Historical Significance</Text>
+              {placeInfo.historicalFacts.map((fact: string, index: number) => (
+                <View key={index} style={styles.factItem}>
+                  <Ionicons name="time" size={16} color="#4CAF50" />
+                  <Text style={styles.factText}>{fact}</Text>
                 </View>
-              )
-            )}
-          </View>
-        )}
+              ))}
+            </View>
+          )}
 
-        {activeSection === "facts" && (
-          <View style={styles.sectionContainer}>
-            {placeInfo.funFacts.map((fact: string, index: number) => (
-              <View key={index} style={styles.funFactItem}>
-                <Ionicons name="bulb-outline" size={24} color="#FF5722" />
-                <Text style={styles.funFactText}>{fact}</Text>
-              </View>
-            ))}
-          </View>
-        )}
+          {activeTab === "attractions" && (
+            <View>
+              <Text style={styles.sectionTitle}>Must-See Attractions</Text>
+              {placeInfo.mustSeeAttractions.map(
+                (attraction: string, index: number) => (
+                  <View key={index} style={styles.attractionItem}>
+                    <Ionicons name="location" size={16} color="#2196F3" />
+                    <Text style={styles.attractionText}>{attraction}</Text>
+                  </View>
+                )
+              )}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.audioSection}>
+          <Text style={styles.audioTitle}>Listen to Audio Guide</Text>
+          <TouchableOpacity style={styles.audioButton}>
+            <Ionicons name="play" size={24} color="#FFF" />
+            <Text style={styles.audioButtonText}>Play Audio</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.actionButtons}>
+          <TouchableOpacity style={styles.actionButton}>
+            <Ionicons name="navigate" size={20} color="#FFF" />
+            <Text style={styles.actionButtonText}>Navigate</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton}>
+            <Ionicons name="bookmark" size={20} color="#FFF" />
+            <Text style={styles.actionButtonText}>Save</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton}>
+            <Ionicons name="share-social" size={20} color="#FFF" />
+            <Text style={styles.actionButtonText}>Share</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Information powered by AI</Text>
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#F5F5F5",
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    backgroundColor: "#F5F5F5",
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 16,
     fontSize: 16,
-    color: "#616161",
-    textAlign: "center",
+    color: "#666",
   },
   errorContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
-  },
-  errorText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#616161",
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  backButton: {
-    backgroundColor: "#FF5722",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-  },
-  backButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-  },
-  imageContainer: {
-    height: 250,
-    position: "relative",
-  },
-  image: {
-    width: "100%",
-    height: "100%",
-  },
-  noImageContainer: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
     backgroundColor: "#F5F5F5",
   },
-  noImageText: {
-    color: "#9E9E9E",
-    marginTop: 10,
+  errorText: {
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: 16,
+    marginBottom: 24,
+    color: "#666",
   },
-  imageNavButton: {
-    position: "absolute",
-    top: "50%",
-    transform: [{ translateY: -20 }],
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
+  backButton: {
+    backgroundColor: "#2196F3",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 4,
   },
-  imageNavLeft: {
-    left: 10,
+  backButtonText: {
+    color: "#FFF",
+    fontWeight: "bold",
   },
-  imageNavRight: {
-    right: 10,
+  heroContainer: {
+    position: "relative",
+    height: 200,
   },
-  imageCounter: {
-    position: "absolute",
-    bottom: 10,
-    right: 10,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    borderRadius: 15,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+  heroImage: {
+    width: "100%",
+    height: "100%",
   },
-  imageCounterText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-  },
-  backButtonTop: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 10,
-  },
-  titleOverlay: {
+  heroOverlay: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    padding: 15,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    padding: 16,
   },
-  title: {
-    color: "#FFFFFF",
+  heroTitle: {
+    color: "#FFF",
     fontSize: 24,
     fontWeight: "bold",
   },
-  actionButtonsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    backgroundColor: "#FFFFFF",
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEEEEE",
-  },
-  actionButton: {
-    alignItems: "center",
-  },
-  actionButtonText: {
-    marginTop: 5,
-    fontSize: 12,
-    color: "#616161",
-  },
   tabContainer: {
     flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEEEEE",
+    backgroundColor: "#FFF",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
   },
   tab: {
     flex: 1,
-    paddingVertical: 15,
+    paddingVertical: 16,
     alignItems: "center",
   },
   activeTab: {
-    borderBottomWidth: 3,
-    borderBottomColor: "#FF5722",
+    borderBottomWidth: 2,
+    borderBottomColor: "#4CAF50",
   },
   tabText: {
     fontSize: 14,
-    color: "#616161",
+    fontWeight: "500",
+    color: "#666",
   },
   activeTabText: {
-    color: "#FF5722",
+    color: "#4CAF50",
     fontWeight: "bold",
   },
   contentContainer: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
+    padding: 16,
+    backgroundColor: "#FFF",
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 4,
   },
-  sectionContainer: {
-    padding: 20,
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
+    color: "#333",
   },
-  description: {
+  descriptionText: {
     fontSize: 16,
     lineHeight: 24,
-    color: "#212121",
+    color: "#444",
+    marginBottom: 16,
   },
   factItem: {
     flexDirection: "row",
-    marginBottom: 20,
-  },
-  factBullet: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#FF5722",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-    marginTop: 2,
-  },
-  factBulletText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-    fontSize: 14,
+    alignItems: "flex-start",
+    marginBottom: 12,
   },
   factText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#555",
     flex: 1,
-    fontSize: 16,
-    lineHeight: 24,
-    color: "#212121",
+    marginLeft: 8,
   },
   attractionItem: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 15,
+    marginBottom: 12,
   },
   attractionText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#555",
     flex: 1,
-    fontSize: 16,
-    color: "#212121",
-    marginLeft: 12,
+    marginLeft: 8,
+    fontWeight: "500",
   },
-  funFactItem: {
+  audioSection: {
+    backgroundColor: "#FFF",
+    padding: 16,
+    marginBottom: 8,
+    borderRadius: 4,
+  },
+  audioTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
+    color: "#333",
+  },
+  audioButton: {
+    backgroundColor: "#4CAF50",
+    borderRadius: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#FFF8E1",
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  funFactText: {
+  audioButtonText: {
+    color: "#FFF",
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
+  actionButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+  actionButton: {
+    backgroundColor: "#2196F3",
+    borderRadius: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
-    fontSize: 16,
-    color: "#212121",
-    marginLeft: 12,
+    marginHorizontal: 4,
+    justifyContent: "center",
+  },
+  actionButtonText: {
+    color: "#FFF",
+    fontWeight: "bold",
+    marginLeft: 4,
+    fontSize: 12,
+  },
+  footer: {
+    padding: 16,
+    alignItems: "center",
+  },
+  footerText: {
+    fontSize: 12,
+    color: "#999",
   },
 });
