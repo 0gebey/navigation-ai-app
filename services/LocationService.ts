@@ -92,6 +92,7 @@ const placesOfInterest: PlaceLocation[] = [
 ];
 
 export class LocationService extends EventEmitter {
+  private static instance: LocationService;
   private watchId: Location.LocationSubscription | null = null;
   private lastLocation: Location.LocationObject | null = null;
   private isTracking: boolean = false;
@@ -99,6 +100,14 @@ export class LocationService extends EventEmitter {
 
   constructor() {
     super();
+  }
+
+  // Static method to get the instance
+  public static getInstance(): LocationService {
+    if (!LocationService.instance) {
+      LocationService.instance = new LocationService();
+    }
+    return LocationService.instance;
   }
 
   // Initialize location services

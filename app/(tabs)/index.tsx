@@ -1,89 +1,69 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  StyleSheet,
   View,
-  Text,
-  TouchableOpacity,
-  Dimensions,
-  Image,
   ActivityIndicator,
   Alert,
+  Linking,
   Platform,
 } from "react-native";
 import * as Location from "expo-location";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { LocationObjectCoords } from "expo-location";
-import Constants from "expo-constants";
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
+import { Stack } from "expo-router";
+import MapboxGL from "@rnmapbox/maps";
+import { useNavigation } from "@react-navigation/native";
+import locationService, { PlaceLocation } from "../../services/LocationService";
+import voiceService from "../../services/VoiceService";
+import { router } from "expo-router";
+import placesService from "../../services/PlacesService";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import theme from "../../styles/theme";
 
-// Define types for points of interest
-interface PointOfInterest {
-  id: string;
-  title: string;
-  description: string;
-  coordinate: {
-    latitude: number;
-    longitude: number;
-  };
-  image: string;
-}
+// Import components
+import MapView from "../../components/Map/MapView";
+import MapControls from "../../components/Map/MapControls";
+import PlaceCard from "../../components/Cards/PlaceCard";
+import SearchBar from "../../components/UI/SearchBar";
+import LoadingScreen from "../../components/UI/LoadingScreen";
+import ErrorScreen from "../../components/UI/ErrorScreen";
 
-// Sample point of interest data
-const pointsOfInterest: PointOfInterest[] = [
-  {
-    id: "1",
-    title: "Nuenen",
-    description: "The village where Vincent van Gogh lived and worked",
-    coordinate: {
-      latitude: 51.4728,
-      longitude: 5.5514,
-    },
-    image:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d9/Vincentre_Nuenen.jpg/1024px-Vincentre_Nuenen.jpg",
-  },
-  {
-    id: "2",
-    title: "Eindhoven",
-    description: "A city known for design and technology innovation",
-    coordinate: {
-      latitude: 51.4416,
-      longitude: 5.4697,
-    },
-    image:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Eindhoven_-_Stadhuisplein_-_City_Hall_Square_-_Stadhuis.jpg/1024px-Eindhoven_-_Stadhuisplein_-_City_Hall_Square_-_Stadhuis.jpg",
-  },
-  {
-    id: "3",
-    title: "Helmond",
-    description: "Historic city with a beautiful castle",
-    coordinate: {
-      latitude: 51.4825,
-      longitude: 5.6618,
-    },
-    image:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/P1000978kopie.jpg/1024px-P1000978kopie.jpg",
-  },
-];
+// Import types
+import { PointOfInterest, Suggestion, PlaceNearbyEvent } from "../../types/map";
 
-// Convert route coordinates to react-native-maps format
-const routeCoordinates = [
-  { latitude: 51.4416, longitude: 5.4697 }, // Eindhoven
-  { latitude: 51.4572, longitude: 5.5106 }, // Midpoint
-  { latitude: 51.4728, longitude: 5.5514 }, // Nuenen
-];
+// Import data
+import { pointsOfInterest } from "../../data/pointsOfInterest";
 
-export default function MapScreen() {
-  const router = useRouter();
-  const [location, setLocation] = useState<LocationObjectCoords | null>(null);
+// Import styles
+import { styles } from "../../styles/tabs/map.styles";
+
+// Initialize Mapbox with access token
+MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || "");
+
+export default function Index() {
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const [location, setLocation] = useState<Location.LocationObject | null>(
+    null
+  );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPOI, setSelectedPOI] = useState<PointOfInterest | null>(null);
-  const mapRef = useRef<MapView>(null);
+  const [activeRoute, setActiveRoute] = useState<any>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [distance, setDistance] = useState<string>("");
+  const [duration, setDuration] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [filteredPOIs, setFilteredPOIs] =
+    useState<PointOfInterest[]>(pointsOfInterest);
+  const [searchSuggestions, setSearchSuggestions] = useState<Suggestion[]>([]);
+  const mapboxRef = useRef<MapboxGL.MapView | null>(null);
+  const cameraRef = useRef<MapboxGL.Camera | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
+  // Initialize location tracking and listeners
   useEffect(() => {
-    (async () => {
+    const setupLocation = async () => {
       try {
+        // Request permissions
         let { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") {
           setErrorMsg("Permission to access location was denied");
@@ -91,287 +71,371 @@ export default function MapScreen() {
           return;
         }
 
-        let location = await Location.getCurrentPositionAsync({});
-        setLocation(location.coords);
+        // Initialize location service
+        await locationService.init();
+        await locationService.startLocationTracking();
+
+        // Get current location
+        let locationData = await Location.getCurrentPositionAsync({});
+        setLocation(locationData);
+        setLoading(false);
+
+        // Update PlacesService with current location for better search results
+        if (locationData?.coords) {
+          placesService.setLastLocation(
+            locationData.coords.longitude,
+            locationData.coords.latitude
+          );
+        }
+
+        // Listen for place nearby events
+        locationService.on("placeNearby", (data: PlaceNearbyEvent) => {
+          const { place, distance } = data;
+
+          // Find corresponding POI
+          const poi = pointsOfInterest.find((p) => p.title === place.name);
+          if (poi) {
+            setSelectedPOI(poi);
+
+            // Auto-narrate information about the place
+            handleNarratePOI(poi, distance);
+          }
+        });
+
+        // Listen for voice events
+        voiceService.on("speaking", () => setIsSpeaking(true));
+        voiceService.on("finished", () => setIsSpeaking(false));
+        voiceService.on("stopped", () => setIsSpeaking(false));
       } catch (error) {
-        setErrorMsg("Could not get location");
-        console.error(error);
-      } finally {
+        console.error("Error setting up location:", error);
+        setErrorMsg("Could not initialize navigation services");
         setLoading(false);
       }
-    })();
+    };
+
+    setupLocation();
+
+    // Cleanup
+    return () => {
+      locationService.removeAllListeners("placeNearby");
+      locationService.stopLocationTracking();
+    };
   }, []);
 
-  const goToUserLocation = () => {
-    if (location && mapRef.current) {
-      mapRef.current.animateToRegion(
-        {
-          latitude: location.latitude,
-          longitude: location.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        },
-        1000
+  useEffect(() => {
+    if (searchQuery.trim() === "") {
+      setFilteredPOIs(pointsOfInterest);
+    } else {
+      const lowercaseQuery = searchQuery.toLowerCase();
+      const filtered = pointsOfInterest.filter(
+        (poi) =>
+          poi.title.toLowerCase().includes(lowercaseQuery) ||
+          poi.description.toLowerCase().includes(lowercaseQuery)
       );
+      setFilteredPOIs(filtered);
+    }
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (selectedPOI && location) {
+      calculateRouteToSelectedPOI();
+    }
+  }, [selectedPOI, location]);
+
+  const calculateRouteToSelectedPOI = async () => {
+    if (!selectedPOI || !location) return;
+
+    try {
+      const startLat = location.coords.latitude;
+      const startLng = location.coords.longitude;
+      const endLat = selectedPOI.coordinate.latitude;
+      const endLng = selectedPOI.coordinate.longitude;
+
+      const routeInfo = await locationService.getRoute(
+        startLat,
+        startLng,
+        endLat,
+        endLng
+      );
+
+      if (routeInfo) {
+        setActiveRoute(routeInfo);
+        setDistance(locationService.formatDistance(routeInfo.distance));
+        setDuration(locationService.formatDuration(routeInfo.duration));
+      }
+    } catch (error) {
+      console.error("Error calculating route:", error);
     }
   };
 
+  // Handle POI narration
+  const handleNarratePOI = async (poi: PointOfInterest, distance?: number) => {
+    try {
+      // Stop any ongoing narration
+      if (isSpeaking) {
+        voiceService.stop();
+      }
+
+      // Calculate distance if not provided
+      const distanceInKm =
+        distance ||
+        (location
+          ? locationService.calculateDistance(
+              {
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+              },
+              poi.coordinate
+            )
+          : 1);
+
+      // Speak the approaching narrative
+      await voiceService.speakApproachingNarrative(poi.title, distanceInKm);
+    } catch (error) {
+      console.error("Error narrating POI:", error);
+    }
+  };
+
+  // Center the map on user location
+  const goToUserLocation = () => {
+    if (location && cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: [location.coords.longitude, location.coords.latitude],
+        zoomLevel: 14,
+        animationDuration: 500,
+      });
+    }
+  };
+
+  // Handle marker press
   const handleMarkerPress = (poi: PointOfInterest) => {
     setSelectedPOI(poi);
-    if (mapRef.current) {
-      mapRef.current.animateToRegion(
+
+    // Calculate distance and generate narration
+    if (location) {
+      const distance = locationService.calculateDistance(
         {
-          latitude: poi.coordinate.latitude,
-          longitude: poi.coordinate.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
         },
-        500
+        poi.coordinate
       );
+      handleNarratePOI(poi, distance);
+    }
+
+    // Animate map to show the POI
+    if (cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: [poi.coordinate.longitude, poi.coordinate.latitude],
+        zoomLevel: 14,
+        animationDuration: 500,
+      });
     }
   };
 
+  // Handle close card
   const handleCloseCard = () => {
     setSelectedPOI(null);
+    if (isSpeaking) {
+      voiceService.stop();
+    }
   };
 
-  const navigateToPlacesTab = () => {
-    router.push("/(tabs)/places");
+  // Start navigation to the selected POI using native maps app
+  const startNavigation = (poi: PointOfInterest) => {
+    const { latitude, longitude } = poi.coordinate;
+    const label = encodeURIComponent(poi.title);
+    let url: string;
+
+    // Different URL schemes for iOS and Android
+    if (Platform.OS === "ios") {
+      url = `maps://app?saddr=Current+Location&daddr=${latitude},${longitude}&dirflg=d`;
+    } else {
+      url = `google.navigation:q=${latitude},${longitude}`;
+    }
+
+    // Open the native navigation app
+    navigateToPlace(url, latitude, longitude);
+  };
+
+  const navigateToPlace = (
+    url: string,
+    latitude: number,
+    longitude: number
+  ) => {
+    Linking.canOpenURL(url)
+      .then((supported) => {
+        if (supported) {
+          return Linking.openURL(url);
+        } else {
+          // Fallback to Google Maps web URL
+          const webUrl = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=driving&dir_action=navigate`;
+          return Linking.openURL(webUrl);
+        }
+      })
+      .catch((error) => {
+        console.error("Error opening navigation:", error);
+        Alert.alert("Navigation Error", "Could not open navigation app");
+      });
+  };
+
+  const handleSearch = (text: string) => {
+    setSearchQuery(text);
+  };
+
+  const navigateToPlaceDetails = () => {
+    if (selectedPOI) {
+      // Navigate to the places tab with the selected POI
+      router.push("/(tabs)/places");
+    }
+  };
+
+  // Fetch search suggestions based on user input
+  const fetchSuggestions = async (
+    query: string,
+    category?: string
+  ): Promise<Suggestion[]> => {
+    if (query.trim().length < 2) return [];
+
+    try {
+      // Use PlacesService to search for places with the selected category
+      const results = await placesService.searchPlacesByText(
+        query,
+        category || selectedCategory
+      );
+
+      // Transform the API results to match our Suggestion interface
+      return results.map((place) => ({
+        id: place.id,
+        placeName: place.name,
+        description: place.address || place.category,
+        coordinate: place.coordinates,
+      }));
+    } catch (error) {
+      console.error("Error fetching search suggestions:", error);
+      return [];
+    }
+  };
+
+  // Handle category change
+  const handleCategoryChange = (category: string) => {
+    setSelectedCategory(category);
+    // If there's an active search query, refresh results with new category
+    if (searchQuery.trim().length >= 2) {
+      fetchSuggestions(searchQuery, category).then((suggestions) => {
+        setSearchSuggestions(suggestions);
+      });
+    }
+  };
+
+  // Handle suggestion selection
+  const handleSelectSuggestion = (suggestion: Suggestion) => {
+    if (!suggestion.coordinate) return;
+
+    // Find if the suggestion corresponds to one of our POIs
+    const matchingPOI = pointsOfInterest.find(
+      (poi) => poi.title.toLowerCase() === suggestion.placeName.toLowerCase()
+    );
+
+    if (matchingPOI) {
+      // If it's a known POI, select it
+      handleMarkerPress(matchingPOI);
+    } else {
+      // Otherwise create a temporary POI and navigate to it
+      const tempPOI: PointOfInterest = {
+        id: suggestion.id,
+        title: suggestion.placeName,
+        description: suggestion.description || "Search result",
+        coordinate: suggestion.coordinate,
+        image:
+          "https://images.unsplash.com/photo-1518945756765-f8641d60aa75?q=80&w=600&auto=format",
+      };
+
+      // Animate to the selected location
+      if (cameraRef.current) {
+        cameraRef.current.setCamera({
+          centerCoordinate: [
+            suggestion.coordinate.longitude,
+            suggestion.coordinate.latitude,
+          ],
+          zoomLevel: 14,
+          animationDuration: 500,
+        });
+      }
+    }
   };
 
   if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#0000ff" />
-        <Text style={styles.paragraph}>Loading map...</Text>
-      </View>
-    );
+    return <LoadingScreen message="Loading navigation map..." />;
   }
 
   if (errorMsg) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.paragraph}>{errorMsg}</Text>
-      </View>
-    );
+    return <ErrorScreen message={errorMsg} />;
   }
 
   return (
-    <View style={styles.container}>
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        provider={PROVIDER_DEFAULT}
-        initialRegion={{
-          latitude: location?.latitude || 51.4416,
-          longitude: location?.longitude || 5.4697,
-          latitudeDelta: 0.0922,
-          longitudeDelta: 0.0421,
+    <View style={[styles.container]}>
+      <Stack.Screen
+        options={{
+          title: "Navigation",
+          headerStyle: {
+            backgroundColor: theme.colors.neutral.white,
+          },
+          headerTitleStyle: {
+            fontWeight: "600",
+            color: theme.colors.text.primary,
+          },
         }}
-        showsUserLocation
-        showsMyLocationButton
-      >
-        {/* Points of Interest */}
-        {pointsOfInterest.map((poi) => (
-          <Marker
-            key={poi.id}
-            coordinate={poi.coordinate}
-            title={poi.title}
-            description={poi.description}
-            onPress={() => handleMarkerPress(poi)}
-          >
-            <View style={styles.markerContainer}>
-              <View style={styles.marker}>
-                <Text style={styles.markerText}>{poi.title[0]}</Text>
-              </View>
-            </View>
-          </Marker>
-        ))}
+      />
 
-        {/* Route Line */}
-        <Polyline
-          coordinates={routeCoordinates}
-          strokeWidth={4}
-          strokeColor="#3887be"
-        />
-      </MapView>
+      {/* Map View */}
+      <MapView
+        mapboxRef={mapboxRef}
+        cameraRef={cameraRef}
+        location={location}
+        filteredPOIs={filteredPOIs}
+        selectedPOI={selectedPOI}
+        activeRoute={activeRoute}
+        onMapReady={() => setMapReady(true)}
+        onMarkerPress={handleMarkerPress}
+      />
 
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button} onPress={goToUserLocation}>
-          <Text style={styles.buttonText}>My Location</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={navigateToPlacesTab}>
-          <Text style={styles.buttonText}>View Places</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Search Bar */}
+      <SearchBar
+        onSearch={handleSearch}
+        onSelectSuggestion={handleSelectSuggestion}
+        onCategoryChange={handleCategoryChange}
+        placeholder="Search places..."
+        fetchSuggestions={fetchSuggestions}
+        topOffset={15}
+      />
+
+      {/* Locate User Button */}
+      <MapControls
+        onLocateUser={goToUserLocation}
+        showPlaceCard={!!selectedPOI}
+      />
 
       {/* Selected POI Card */}
       {selectedPOI && (
-        <View style={styles.cardContainer}>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={handleCloseCard}
-          >
-            <Text style={styles.closeButtonText}>✕</Text>
-          </TouchableOpacity>
-          <Image source={{ uri: selectedPOI.image }} style={styles.cardImage} />
-          <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>{selectedPOI.title}</Text>
-            <Text style={styles.cardDescription}>
-              {selectedPOI.description}
-            </Text>
-            <TouchableOpacity
-              style={styles.detailsButton}
-              onPress={() => {
-                Alert.alert(
-                  `About ${selectedPOI.title}`,
-                  "This feature will allow you to see detailed information about this location.",
-                  [{ text: "OK" }]
-                );
-              }}
-            >
-              <Text style={styles.detailsButtonText}>Learn More</Text>
-            </TouchableOpacity>
-          </View>
+        <PlaceCard
+          poi={selectedPOI}
+          distance={distance}
+          duration={duration}
+          isSpeaking={isSpeaking}
+          onClose={handleCloseCard}
+          onNarrate={() => handleNarratePOI(selectedPOI)}
+          onNavigate={() => startNavigation(selectedPOI)}
+          onViewDetails={navigateToPlaceDetails}
+        />
+      )}
+
+      {/* Loading indicator while map is preparing */}
+      {!mapReady && (
+        <View style={styles.mapLoadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary.main} />
         </View>
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  map: {
-    flex: 1,
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  paragraph: {
-    fontSize: 16,
-    marginTop: 10,
-    textAlign: "center",
-  },
-  markerContainer: {
-    width: 30,
-    height: 30,
-  },
-  marker: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "#3887be",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "white",
-  },
-  markerText: {
-    color: "white",
-    fontWeight: "bold",
-  },
-  userMarker: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(0, 122, 255, 0.3)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  userMarkerInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "rgb(0, 122, 255)",
-    borderWidth: 2,
-    borderColor: "white",
-  },
-  buttonContainer: {
-    position: "absolute",
-    top: 16,
-    right: 16,
-    flexDirection: "column",
-    gap: 8,
-  },
-  button: {
-    backgroundColor: "white",
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  buttonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#3887be",
-  },
-  cardContainer: {
-    position: "absolute",
-    bottom: 20,
-    left: 20,
-    right: 20,
-    backgroundColor: "white",
-    borderRadius: 12,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  cardImage: {
-    width: "100%",
-    height: 120,
-  },
-  cardContent: {
-    padding: 16,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 8,
-  },
-  cardDescription: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 12,
-  },
-  closeButton: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    zIndex: 1,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  closeButtonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  detailsButton: {
-    backgroundColor: "#3887be",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    alignSelf: "flex-start",
-  },
-  detailsButtonText: {
-    color: "white",
-    fontWeight: "600",
-    fontSize: 14,
-  },
-});

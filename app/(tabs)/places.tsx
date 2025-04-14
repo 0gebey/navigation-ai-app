@@ -1,20 +1,24 @@
 import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  Image,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  TextInput,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { View, FlatList } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import locationService, { PlaceLocation } from "../../services/LocationService";
 import AIService, { PlaceInfo } from "../../services/AIService";
 import placesService from "../../services/PlacesService";
 import * as Location from "expo-location";
+import theme from "../../styles/theme";
+
+// Import components
+import PlaceListItem from "../../components/Cards/PlaceListItem";
+import CategoryFilter from "../../components/UI/CategoryFilter";
+import SearchBar from "../../components/UI/SearchBar";
+import LoadingScreen from "../../components/UI/LoadingScreen";
+import EmptyState from "../../components/UI/EmptyState";
+
+// Import styles
+import { styles } from "../../styles/tabs/places.styles";
+
+// Import types
+import { Suggestion } from "../../types/map";
 
 // Categories for filtering
 const categories = [
@@ -86,47 +90,11 @@ export default function PlacesScreen() {
 
       setLoading(false);
 
-      // Preload place images
-      const imagePromises = allPlaces.map(async (place) => {
-        if (place.photoReference) {
-          const imageUrl = await placesService.getPlacePhoto(
-            place.photoReference
-          );
-          return { id: place.id, url: imageUrl };
-        }
-        return null;
-      });
-
-      const imageResults = await Promise.all(imagePromises);
-      const imagesMap: Record<string, string> = {};
-
-      imageResults.forEach((result) => {
-        if (result) {
-          imagesMap[result.id] = result.url;
-        }
-      });
-
-      setPlaceImages(imagesMap);
-
-      // Fetch place info for all places
-      const infoPromises = allPlaces.map(async (place) => {
-        try {
-          const info = await AIService.getPlaceInfo(place.name);
-          return { name: place.name, info };
-        } catch (error) {
-          console.error(`Error fetching info for ${place.name}:`, error);
-          return { name: place.name, info: null };
-        }
-      });
-
-      const infoResults = await Promise.all(infoPromises);
-      const infoMap: Record<string, PlaceInfo | null> = {};
-
-      infoResults.forEach((result) => {
-        infoMap[result.name] = result.info;
-      });
-
-      setPlaceInfoMap(infoMap);
+      // Preload place images and info
+      await Promise.all([
+        preloadPlaceImages(allPlaces),
+        preloadPlaceInfo(allPlaces),
+      ]);
     };
 
     initLocation();
@@ -146,6 +114,52 @@ export default function PlacesScreen() {
       locationService.removeAllListeners("locationChanged");
     };
   }, []);
+
+  // Preload place images
+  const preloadPlaceImages = async (allPlaces: PlaceLocation[]) => {
+    const imagePromises = allPlaces.map(async (place) => {
+      if (place.photoReference) {
+        const imageUrl = await placesService.getPlacePhoto(
+          place.photoReference
+        );
+        return { id: place.id, url: imageUrl };
+      }
+      return null;
+    });
+
+    const imageResults = await Promise.all(imagePromises);
+    const imagesMap: Record<string, string> = {};
+
+    imageResults.forEach((result) => {
+      if (result) {
+        imagesMap[result.id] = result.url;
+      }
+    });
+
+    setPlaceImages(imagesMap);
+  };
+
+  // Preload place info
+  const preloadPlaceInfo = async (allPlaces: PlaceLocation[]) => {
+    const infoPromises = allPlaces.map(async (place) => {
+      try {
+        const info = await AIService.getPlaceInfo(place.name);
+        return { name: place.name, info };
+      } catch (error) {
+        console.error(`Error fetching info for ${place.name}:`, error);
+        return { name: place.name, info: null };
+      }
+    });
+
+    const infoResults = await Promise.all(infoPromises);
+    const infoMap: Record<string, PlaceInfo | null> = {};
+
+    infoResults.forEach((result) => {
+      infoMap[result.name] = result.info;
+    });
+
+    setPlaceInfoMap(infoMap);
+  };
 
   // Filter places when category or search query changes
   useEffect(() => {
@@ -187,114 +201,97 @@ export default function PlacesScreen() {
     router.push(`/place/${place.name}`);
   };
 
+  const handleSearch = (text: string) => {
+    setSearchQuery(text);
+  };
+
+  const handleCategoryChange = (category: string) => {
+    setSelectedCategory(category);
+  };
+
+  // Fetch search suggestions based on user input
+  const fetchSuggestions = async (
+    query: string,
+    category?: string
+  ): Promise<Suggestion[]> => {
+    if (query.trim().length < 2) return [];
+
+    try {
+      // Use PlacesService to search for places with the selected category
+      const results = await placesService.searchPlacesByText(
+        query,
+        category || selectedCategory
+      );
+
+      // Transform the API results to match our Suggestion interface
+      return results.map((place) => ({
+        id: place.id,
+        placeName: place.name,
+        description: place.address || place.category,
+        coordinate: place.coordinates,
+      }));
+    } catch (error) {
+      console.error("Error fetching search suggestions:", error);
+      return [];
+    }
+  };
+
   // Render each place card
   const renderPlaceItem = ({ item }: { item: PlaceLocation }) => {
-    // Get place info from our map instead of using hooks
     const placeInfo = placeInfoMap[item.name];
 
     return (
-      <TouchableOpacity
-        style={styles.placeCard}
+      <PlaceListItem
+        place={item}
+        placeInfo={placeInfo}
+        image={getPlaceImage(item.id)}
         onPress={() => navigateToPlaceDetails(item)}
-      >
-        <Image
-          source={getPlaceImage(item.id)}
-          style={styles.placeImage}
-          resizeMode="cover"
-        />
-        <View style={styles.placeInfo}>
-          <Text style={styles.placeName}>{item.name}</Text>
-          {placeInfo && (
-            <Text style={styles.placeDescription} numberOfLines={2}>
-              {placeInfo.description}
-            </Text>
-          )}
-          <View style={styles.placeDetails}>
-            {item.distance !== undefined && (
-              <View style={styles.distanceContainer}>
-                <Ionicons name="locate-outline" size={16} color="#4CAF50" />
-                <Text style={styles.distance}>
-                  {locationService.formatDistance(item.distance)}
-                </Text>
-              </View>
-            )}
-            <View style={styles.categoryTag}>
-              <Text style={styles.categoryText}>
-                {item.category || "Place"}
-              </Text>
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
+      />
     );
   };
 
-  // Render the category filter tabs
-  const renderCategoryFilter = () => (
-    <View style={styles.categoryContainer}>
-      <FlatList
-        horizontal
-        data={categories}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.categoryButton,
-              selectedCategory === item.id && styles.selectedCategoryButton,
-            ]}
-            onPress={() => setSelectedCategory(item.id)}
-          >
-            <Text
-              style={[
-                styles.categoryButtonText,
-                selectedCategory === item.id && styles.selectedCategoryText,
-              ]}
-            >
-              {item.label}
-            </Text>
-          </TouchableOpacity>
-        )}
-        keyExtractor={(item) => item.id}
-        showsHorizontalScrollIndicator={false}
-      />
-    </View>
-  );
-
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
-        <Text style={styles.loadingText}>Loading places...</Text>
-      </View>
-    );
+    return <LoadingScreen message="Loading places..." />;
   }
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ headerTitle: "Explore Places" }} />
+      <Stack.Screen
+        options={{
+          headerTitle: "Explore Places",
+          headerStyle: {
+            backgroundColor: theme.colors.neutral.white,
+          },
+          headerTitleStyle: {
+            fontWeight: "600",
+            color: theme.colors.text.primary,
+          },
+        }}
+      />
 
       {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons
-          name="search"
-          size={20}
-          color="#666"
-          style={styles.searchIcon}
-        />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search places..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery("")}>
-            <Ionicons name="close-circle" size={20} color="#666" />
-          </TouchableOpacity>
-        )}
-      </View>
+      <SearchBar
+        placeholder="Search places..."
+        onSearch={handleSearch}
+        onSelectSuggestion={(suggestion) => {
+          const matchingPlace = places.find(
+            (p) => p.name === suggestion.placeName
+          );
+          if (matchingPlace) {
+            navigateToPlaceDetails(matchingPlace);
+          }
+        }}
+        onCategoryChange={handleCategoryChange}
+        fetchSuggestions={fetchSuggestions}
+        topOffset={0}
+      />
 
       {/* Category Filters */}
-      {renderCategoryFilter()}
+      <CategoryFilter
+        categories={categories}
+        selectedCategory={selectedCategory}
+        onCategoryChange={setSelectedCategory}
+      />
 
       {/* Places List */}
       {filteredPlaces.length > 0 ? (
@@ -305,157 +302,12 @@ export default function PlacesScreen() {
           contentContainerStyle={styles.placesList}
         />
       ) : (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="location-outline" size={60} color="#ccc" />
-          <Text style={styles.emptyText}>No places found</Text>
-          <Text style={styles.emptySubtext}>
-            Try changing your filters or search query
-          </Text>
-        </View>
+        <EmptyState
+          icon="location-outline"
+          title="No places found"
+          message="Try changing your filters or search query"
+        />
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#666",
-  },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    margin: 16,
-    paddingHorizontal: 15,
-    borderRadius: 8,
-    height: 50,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchInput: {
-    flex: 1,
-    height: 50,
-    fontSize: 16,
-  },
-  categoryContainer: {
-    paddingHorizontal: 12,
-    marginBottom: 16,
-  },
-  categoryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginHorizontal: 4,
-    borderRadius: 20,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#ddd",
-  },
-  selectedCategoryButton: {
-    backgroundColor: "#4CAF50",
-    borderColor: "#4CAF50",
-  },
-  categoryButtonText: {
-    fontSize: 14,
-    color: "#666",
-  },
-  selectedCategoryText: {
-    color: "#fff",
-    fontWeight: "500",
-  },
-  placesList: {
-    padding: 12,
-  },
-  placeCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 2,
-    overflow: "hidden",
-    flexDirection: "row",
-    height: 120,
-  },
-  placeImage: {
-    width: 120,
-    height: "100%",
-  },
-  placeInfo: {
-    flex: 1,
-    padding: 12,
-    justifyContent: "space-between",
-  },
-  placeName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 4,
-  },
-  placeDescription: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 8,
-  },
-  placeDetails: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  distanceContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  distance: {
-    fontSize: 14,
-    color: "#4CAF50",
-    marginLeft: 4,
-    fontWeight: "500",
-  },
-  categoryTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 12,
-  },
-  categoryText: {
-    fontSize: 12,
-    color: "#666",
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#666",
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#999",
-    marginTop: 8,
-    textAlign: "center",
-  },
-});

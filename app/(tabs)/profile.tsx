@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  StyleSheet,
   View,
   Text,
   Image,
@@ -11,6 +10,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { styles } from "../../styles/tabs/profile.styles";
+import theme from "../../styles/theme";
 
 // Define types
 interface User {
@@ -138,7 +139,11 @@ export default function ProfileScreen() {
   const renderSettingItem = (setting: Setting) => (
     <View key={setting.id} style={styles.settingItem}>
       <View style={styles.settingIconContainer}>
-        <Ionicons name={setting.icon} size={24} color="#FF5722" />
+        <Ionicons
+          name={setting.icon}
+          size={24}
+          color={theme.colors.primary.main}
+        />
       </View>
       <View style={styles.settingContent}>
         <Text style={styles.settingTitle}>{setting.title}</Text>
@@ -147,8 +152,13 @@ export default function ProfileScreen() {
       <Switch
         value={setting.value}
         onValueChange={setting.onToggle}
-        trackColor={{ false: "#E0E0E0", true: "#FFCCBC" }}
-        thumbColor={setting.value ? "#FF5722" : "#FFF"}
+        trackColor={{
+          false: theme.colors.neutral.border,
+          true: theme.colors.primary.light,
+        }}
+        thumbColor={
+          setting.value ? theme.colors.primary.main : theme.colors.neutral.white
+        }
       />
     </View>
   );
@@ -164,7 +174,11 @@ export default function ProfileScreen() {
       </View>
       <View style={styles.tripDetails}>
         <View style={styles.tripDetail}>
-          <Ionicons name="location" size={16} color="#FF5722" />
+          <Ionicons
+            name="location"
+            size={16}
+            color={theme.colors.primary.main}
+          />
           <Text style={styles.tripDetailText}>
             {trip.places} places visited
           </Text>
@@ -192,7 +206,11 @@ export default function ProfileScreen() {
 
           {user.premium && (
             <View style={styles.premiumBadge}>
-              <Ionicons name="star" size={16} color="#FFF" />
+              <Ionicons
+                name="star"
+                size={16}
+                color={theme.colors.text.inverse}
+              />
               <Text style={styles.premiumText}>Premium</Text>
             </View>
           )}
@@ -235,24 +253,40 @@ export default function ProfileScreen() {
 
           <TouchableOpacity style={styles.viewAllButton}>
             <Text style={styles.viewAllText}>View All Trips</Text>
-            <Ionicons name="chevron-forward" size={16} color="#FF5722" />
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={theme.colors.primary.main}
+            />
           </TouchableOpacity>
         </View>
 
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
           <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="help-circle-outline" size={20} color="#616161" />
+            <Ionicons
+              name="help-circle-outline"
+              size={20}
+              color={theme.colors.text.secondary}
+            />
             <Text style={styles.actionButtonText}>Help & Support</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="settings-outline" size={20} color="#616161" />
+            <Ionicons
+              name="settings-outline"
+              size={20}
+              color={theme.colors.text.secondary}
+            />
             <Text style={styles.actionButtonText}>Advanced Settings</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={[styles.actionButton, styles.logoutButton]}>
-            <Ionicons name="log-out-outline" size={20} color="#F44336" />
+            <Ionicons
+              name="log-out-outline"
+              size={20}
+              color={theme.colors.accent.red}
+            />
             <Text style={[styles.actionButtonText, styles.logoutText]}>
               Log Out
             </Text>
@@ -262,243 +296,3 @@ export default function ProfileScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F5F5F5",
-  },
-  profileHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#FFF",
-    padding: 20,
-    marginBottom: 15,
-  },
-  profileInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  avatar: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 2,
-    borderColor: "#FF5722",
-  },
-  userInfo: {
-    marginLeft: 15,
-  },
-  userName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#212121",
-  },
-  userEmail: {
-    fontSize: 14,
-    color: "#616161",
-    marginTop: 2,
-  },
-  memberSince: {
-    fontSize: 12,
-    color: "#9E9E9E",
-    marginTop: 4,
-  },
-  premiumBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FF8F00",
-    borderRadius: 15,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  premiumText: {
-    color: "#FFF",
-    fontWeight: "bold",
-    fontSize: 12,
-    marginLeft: 3,
-  },
-  statsContainer: {
-    flexDirection: "row",
-    backgroundColor: "#FFF",
-    borderRadius: 10,
-    marginHorizontal: 20,
-    marginBottom: 20,
-    paddingVertical: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 1,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#212121",
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#616161",
-    marginTop: 5,
-  },
-  statDivider: {
-    width: 1,
-    height: "70%",
-    backgroundColor: "#E0E0E0",
-  },
-  settingsSection: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#212121",
-    marginHorizontal: 20,
-    marginBottom: 10,
-  },
-  sectionContent: {
-    backgroundColor: "#FFF",
-    borderRadius: 10,
-    marginHorizontal: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 1,
-  },
-  settingItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 15,
-    paddingHorizontal: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F5F5F5",
-  },
-  settingIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#FFF3E0",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 15,
-  },
-  settingContent: {
-    flex: 1,
-  },
-  settingTitle: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#212121",
-  },
-  settingDescription: {
-    fontSize: 12,
-    color: "#9E9E9E",
-    marginTop: 2,
-  },
-  tripHistorySection: {
-    marginBottom: 20,
-  },
-  tripsList: {
-    backgroundColor: "#FFF",
-    borderRadius: 10,
-    marginHorizontal: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 1,
-  },
-  tripItem: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F5F5F5",
-  },
-  tripHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  tripRoute: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#212121",
-  },
-  tripDate: {
-    fontSize: 12,
-    color: "#9E9E9E",
-  },
-  tripDetails: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  tripDetail: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  tripDetailText: {
-    fontSize: 12,
-    color: "#616161",
-    marginLeft: 5,
-  },
-  viewTripButton: {
-    backgroundColor: "#F5F5F5",
-    borderRadius: 15,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-  },
-  viewTripText: {
-    fontSize: 12,
-    color: "#616161",
-    fontWeight: "bold",
-  },
-  viewAllButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 15,
-    marginBottom: 5,
-  },
-  viewAllText: {
-    fontSize: 14,
-    color: "#FF5722",
-    fontWeight: "bold",
-    marginRight: 5,
-  },
-  actionButtons: {
-    backgroundColor: "#FFF",
-    borderRadius: 10,
-    marginHorizontal: 20,
-    marginBottom: 30,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 1,
-  },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F5F5F5",
-  },
-  actionButtonText: {
-    fontSize: 14,
-    color: "#616161",
-    marginLeft: 15,
-  },
-  logoutButton: {
-    borderBottomWidth: 0,
-  },
-  logoutText: {
-    color: "#F44336",
-  },
-});
