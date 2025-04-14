@@ -1,4 +1,4 @@
-package com.mapapp.example
+package com.x0gebey.mapapp
 
 import android.app.Application
 import android.content.res.Configuration

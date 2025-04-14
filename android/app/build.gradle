@@ -94,9 +94,9 @@ packagingOptions {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.mapapp.example'
+    namespace 'com.x0gebey.mapapp'
     defaultConfig {
-        applicationId 'com.mapapp.example'
+        applicationId 'com.x0gebey.mapapp'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

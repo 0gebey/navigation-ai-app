@@ -24,8 +24,7 @@
       [
         "@rnmapbox/maps",
         {
-          "RNMapboxMapsVersion": "11.8.0",
-          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoiMGdlYmV5IiwiYSI6ImNtOWdhZHJ5YzBhaXUybHNjN3Z4Nm95MW4ifQ.BljN8hQ0tS8o8KYzwWCY2Q"
+          "RNMapboxMapsVersion": "11.8.0"
         }
       ]
     ],
@@ -60,8 +59,7 @@
       },
       "eas": {
         "projectId": "your-eas-project-id"
-      },
-      "mapboxAccessToken": "sk.eyJ1IjoiMGdlYmV5IiwiYSI6ImNtOWdhZHJ5YzBhaXUybHNjN3Z4Nm95MW4ifQ.BljN8hQ0tS8o8KYzwWCY2Q"
+      }
     },
     "runtimeVersion": {
       "policy": "appVersion"

@@ -1,4 +1,4 @@
-package com.mapapp.example
+package com.x0gebey.mapapp
 
 import android.os.Build
 import android.os.Bundle

@@ -30,7 +30,7 @@
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="map-app"/>
-        <data android:scheme="com.mapapp.example"/>
+        <data android:scheme="com.x0gebey.mapapp"/>
       </intent-filter>
     </activity>
   </application>
