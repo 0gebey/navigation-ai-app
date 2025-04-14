@@ -18,6 +18,8 @@ import theme from "../../styles/theme";
 // Main PlaceScreen component
 export default function PlaceScreen() {
   const { name } = useLocalSearchParams();
+  const decodedName =
+    typeof name === "string" ? decodeURIComponent(name) : name;
   const router = useRouter();
   const [placeInfo, setPlaceInfo] = useState<PlaceInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,7 +31,7 @@ export default function PlaceScreen() {
       setLoading(true);
       try {
         // Get place info from AIService
-        const info = await AIService.getPlaceInfo(name as string);
+        const info = await AIService.getPlaceInfo(decodedName as string);
         setPlaceInfo(info);
       } catch (error) {
         console.error("Error fetching place info:", error);
@@ -39,7 +41,7 @@ export default function PlaceScreen() {
     };
 
     fetchPlaceInfo();
-  }, [name]);
+  }, [decodedName]);
 
   // Get demo images for places
   const getPlaceImages = (placeName: string) => {
@@ -103,7 +105,7 @@ export default function PlaceScreen() {
       });
   };
 
-  const placeImages = getPlaceImages(name as string);
+  const placeImages = getPlaceImages(decodedName as string);
 
   // Loading state display
   if (loading) {
@@ -111,7 +113,7 @@ export default function PlaceScreen() {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.colors.primary.main} />
         <Text style={styles.loadingText}>
-          Loading information about {name}...
+          Loading information about {decodedName}...
         </Text>
       </View>
     );
@@ -127,7 +129,7 @@ export default function PlaceScreen() {
           color={theme.colors.accent.red}
         />
         <Text style={styles.errorText}>
-          Sorry, we couldn't find information about {name}.
+          Sorry, we couldn't find information about {decodedName}.
         </Text>
         <TouchableOpacity
           style={styles.backButton}

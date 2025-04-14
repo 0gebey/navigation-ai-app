@@ -198,7 +198,9 @@ export default function PlacesScreen() {
   };
 
   const navigateToPlaceDetails = (place: PlaceLocation) => {
-    router.push(`/place/${place.name}`);
+    // Encode the place name to handle spaces and special characters
+    const encodedName = encodeURIComponent(place.name);
+    router.push(`/place?name=${encodedName}`);
   };
 
   const handleSearch = (text: string) => {
